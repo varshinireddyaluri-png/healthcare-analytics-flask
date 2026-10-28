@@ -1,0 +1,298 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Healthcare Analytics Dashboard</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+        }
+        header {
+            background: #0f766e;
+            color: white;
+            padding: 22px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        header h1 { margin: 0; font-size: 24px; }
+        header a { color: white; }
+        main { max-width: 1250px; margin: auto; padding: 24px; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+        .card, .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px #0000000d;
+            margin-bottom: 20px;
+        }
+        .card h3 { color: #64748b; margin-top: 0; }
+        .number { font-size: 32px; font-weight: bold; color: #0f766e; }
+        .panel h2 { margin-top: 0; }
+        .table-wrap { overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; font-size: 14px; }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th { background: #f8fafc; }
+        input, button {
+            padding: 10px;
+            margin: 5px 5px 5px 0;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+        }
+        button {
+            background: #0f766e;
+            color: white;
+            border: 0;
+            cursor: pointer;
+        }
+        button:hover { background: #115e59; }
+        .status { color: #475569; }
+        .chart { width: 100%; max-width: 900px; height: auto; }
+        .error { color: #b91c1c; }
+        @media (max-width: 600px) {
+            main { padding: 14px; }
+            header h1 { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <div>
+        <h1>Healthcare Analytics</h1>
+        <div>Patient Risk Indicator System</div>
+    </div>
+    <div>
+        Welcome, {{ username }} |
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+</header>
+
+<main>
+    <h2>Dashboard Overview</h2>
+    <p class="status" id="loadStatus">Loading data from MySQL...</p>
+
+    <section class="stats">
+        <div class="card">
+            <h3>Total Patients</h3>
+            <div class="number" id="patientCount">—</div>
+        </div>
+        <div class="card">
+            <h3>Total Visits</h3>
+            <div class="number" id="visitCount">—</div>
+        </div>
+        <div class="card">
+            <h3>Health Measurements</h3>
+            <div class="number" id="measurementCount">—</div>
+        </div>
+        <div class="card">
+            <h3>Risk Indicators</h3>
+            <div class="number" id="riskCount">—</div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Department Visit Analytics</h2>
+        <img class="chart" src="{{ url_for('department_chart') }}"
+             alt="Bar chart of visits by hospital department">
+    </section>
+
+    <section class="panel">
+        <h2>Patient Records</h2>
+        <button onclick="loadPatients()">Refresh Patients</button>
+        <p id="patientMessage" class="status"></p>
+        <div id="patientsTable" class="table-wrap"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Health Measurements</h2>
+        <label for="patientSearch">Filter by patient ID:</label>
+        <input id="patientSearch" placeholder="Enter patient ID">
+        <button onclick="loadMeasurements()">Search</button>
+        <button onclick="loadMeasurements(true)">Show All</button>
+        <div id="measurementsTable" class="table-wrap"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Risk Indicators</h2>
+        <button onclick="loadRisks()">Load Risk Indicators</button>
+        <div id="risksTable" class="table-wrap"></div>
+    </section>
+
+    <section class="panel">
+        <h2>Diabetes Risk Prediction</h2>
+        <p>Enter measurements for an educational model demonstration. This form does not diagnose diabetes.</p>
+        <form id="predictionForm">
+            <label for="glucose">Glucose (mg/dL)</label>
+            <input id="glucose" name="glucose" type="number"
+                   min="1" step="any" required>
+            <label for="bmi">BMI</label>
+            <input id="bmi" name="bmi" type="number"
+                   min="0.1" step="any" required>
+            <label for="age">Age</label>
+            <input id="age" name="age" type="number"
+                   min="1" max="120" required>
+            <button type="submit">Submit Measurements</button>
+        </form>
+        <p id="predictionResult" role="status"></p>
+        <p class="status">
+            A trained and validated machine-learning model must be connected before this page can provide a risk estimate.
+        </p>
+    </section>
+</main>
+
+<script>
+async function getData(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error("Could not load " + url + ". Please log in again if your session expired.");
+    }
+    return await response.json();
+}
+
+function renderTable(containerId, rows) {
+    const container = document.getElementById(containerId);
+
+    if (!rows || rows.length === 0) {
+        container.textContent = "No records found.";
+        return;
+    }
+
+    const columns = [...new Set(rows.flatMap(row => Object.keys(row)))];
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+
+    columns.forEach(column => {
+        const th = document.createElement("th");
+        th.textContent = column;
+        headerRow.appendChild(th);
+    });
+
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach(row => {
+        const tr = document.createElement("tr");
+        columns.forEach(column => {
+            const td = document.createElement("td");
+            const value = row[column];
+            td.textContent = value === null || value === undefined
+                ? "" : String(value);
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    container.replaceChildren(table);
+}
+
+async function loadPatients() {
+    try {
+        const rows = await getData("/patients");
+        document.getElementById("patientCount").textContent = rows.length;
+        renderTable("patientsTable", rows);
+        document.getElementById("patientMessage").textContent =
+            rows.length + " patient records loaded.";
+    } catch (error) {
+        document.getElementById("patientMessage").textContent = error.message;
+    }
+}
+
+async function loadMeasurements(showAll = false) {
+    try {
+        let rows = await getData("/measurements");
+        const search = document.getElementById("patientSearch").value.trim();
+
+        if (!showAll && search) {
+            rows = rows.filter(row =>
+                Object.entries(row).some(([key, value]) =>
+                    key.toLowerCase().includes("patient") &&
+                    String(value) === search
+                )
+            );
+        }
+
+        renderTable("measurementsTable", rows);
+    } catch (error) {
+        document.getElementById("measurementsTable").textContent = error.message;
+    }
+}
+
+async function loadRisks() {
+    try {
+        const rows = await getData("/risk-indicators");
+        document.getElementById("riskCount").textContent = rows.length;
+        renderTable("risksTable", rows);
+    } catch (error) {
+        document.getElementById("risksTable").textContent = error.message;
+    }
+}
+
+async function loadDashboard() {
+    try {
+        const [patients, visits, measurements, risks] = await Promise.all([
+            getData("/patients"),
+            getData("/visits"),
+            getData("/measurements"),
+            getData("/risk-indicators")
+        ]);
+
+        document.getElementById("patientCount").textContent = patients.length;
+        document.getElementById("visitCount").textContent = visits.length;
+        document.getElementById("measurementCount").textContent = measurements.length;
+        document.getElementById("riskCount").textContent = risks.length;
+        document.getElementById("loadStatus").textContent =
+            "Dashboard data loaded successfully.";
+        renderTable("patientsTable", patients);
+        renderTable("measurementsTable", measurements);
+    } catch (error) {
+        document.getElementById("loadStatus").textContent = error.message;
+        document.getElementById("loadStatus").className = "error";
+    }
+}
+
+document.getElementById("predictionForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const result = document.getElementById("predictionResult");
+    result.textContent = "Submitting measurements...";
+
+    try {
+        const response = await fetch("/predict-diabetes", {
+            method: "POST",
+            body: new FormData(event.target)
+        });
+        const data = await response.json();
+
+        result.textContent = data.error || data.message;
+        if (!response.ok) result.className = "error";
+        else result.className = "status";
+    } catch (error) {
+        result.textContent = "Could not submit the measurements.";
+        result.className = "error";
+    }
+});
+
+loadDashboard();
+</script>
+</body>
+</html>
+

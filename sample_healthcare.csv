@@ -1,0 +1,6 @@
+patient_id,age_band,department,visits
+P0001,30-39,General Medicine,3
+P0002,40-49,Cardiology,5
+P0003,50-59,Endocrinology,2
+P0004,30-39,General Medicine,4
+P0005,60+,Cardiology,6

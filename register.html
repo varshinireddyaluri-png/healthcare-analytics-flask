@@ -1,0 +1,33 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Register - Healthcare Analytics</title>
+</head>
+<body>
+    <h1>Healthcare Analytics</h1>
+    <h2>Create Account</h2>
+
+    {% with messages = get_flashed_messages() %}
+        {% for message in messages %}
+            <p>{{ message }}</p>
+        {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('register') }}">
+        <label>Username</label>
+        <input type="text" name="username" required>
+        <br><br>
+        <label>Password (at least 8 characters)</label>
+        <input type="password" name="password" minlength="8" required>
+        <br><br>
+        <button type="submit">Register</button>
+    </form>
+
+    <p>Already registered?
+        <a href="{{ url_for('login') }}">Login here</a>
+    </p>
+</body>
+</html>
